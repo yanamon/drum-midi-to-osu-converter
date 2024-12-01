@@ -5,7 +5,7 @@ Notes placement are following real drum pattern.
 ## Sample
 
 osu beatmap:
-https://github.com/yanamon/drum-midi-to-osu-converter.
+https://osu.ppy.sh/beatmapsets/2287846#mania/4881470
 
 converted from drum sheet: https://musescore.com/user/34263161/scores/7825475
 
