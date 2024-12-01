@@ -5,15 +5,19 @@ import model.Note;
 import model.NoteArray;
 import model.OsuBeatmap;
 import model.Timing;
-import org.apache.commons.io.FileUtils;
+import model.midi.percussion.DrumSample;
 import util.*;
+import util.common.BpmToTempoConverter;
+import util.midi.sequence.TimelineHelper;
 
 import javax.sound.midi.*;
 import javax.swing.*;
 import java.io.*;
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.TreeMap;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
+import java.util.*;
 
 
 public class MidiToOsuConverter implements Runnable {
@@ -91,26 +95,11 @@ public class MidiToOsuConverter implements Runnable {
         midiPath = PropertyAdapter.readFromProperty(PropertyAdapter.MIDI_PATH);
     }
 
-
-    public void setConvert(String input) {
-        convert = input;
-    }
-
     public void run() {
         songDurationInMS = sequencer.getMicrosecondLength() / 1000L;
-
-        if (extractNotes) {
-            Utils.createFolder(hitsoundPath);
-        }
         Utils.createFolder(outputPath);
         if (songDurationInMS < 0) {
             JOptionPane.showMessageDialog(null, "Error with Midi file, no empty mp3 created!");
-        } else {
-            Utils.createEmptyWAV((int) songDurationInMS, outputPath + OsuBeatmap.audioName);
-        }
-
-        if (customHS) {
-            loadHSConvert(convert);
         }
         try {
             if (customTiming) {
@@ -125,146 +114,12 @@ public class MidiToOsuConverter implements Runnable {
             loadTimeline(sequencer);
             ArrayList<NoteArray> info = getMidiInfo(sequencer, options);
             toOsuBeatmap(info);
+            copyDrumSamples();
         } catch (Exception e) {
             e.printStackTrace();
         }
         // display finished
         JOptionPane.showMessageDialog(null, "Finished!");
-    }
-
-    /**
-     * Output a note as .wav file
-     *
-     * @param note     Note to output
-     * @param filename complete path
-     * @throws MidiUnavailableException
-     * @throws InvalidMidiDataException
-     * @throws IOException
-     */
-    private void extractNote(Note note, String filename)
-            throws MidiUnavailableException, InvalidMidiDataException,
-            IOException {
-
-        try {
-            int channel = note.getChannel();
-            Sequencer sequencer = MidiSystem.getSequencer();
-            int resolution = this.sequencer.getSequence().getResolution();
-            float divisionType = this.sequencer.getSequence().getDivisionType();
-            Sequence seq = new Sequence(divisionType, resolution);
-            sequencer.setSequence(seq);
-            Track track = seq.createTrack();
-
-            // set instrument
-            ShortMessage instrumentChange = new ShortMessage();
-            int instrument = note.getInstrument();
-            instrumentChange.setMessage(ShortMessage.PROGRAM_CHANGE, channel,
-                    instrument, 0);
-            track.add(new MidiEvent(instrumentChange, 0));
-
-            // set channel volume
-            int channelVolume = note.getChannelVolume();
-            // System.out.println(channelVolume);
-            ShortMessage channelVolumeChange = new ShortMessage();
-            channelVolumeChange.setMessage(ShortMessage.CONTROL_CHANGE,
-                    channel, 7, channelVolume);
-            track.add(new MidiEvent(channelVolumeChange, 0));
-            // add note
-            int key = note.getKey();
-            int velocity = note.getVelocity();
-            int startT = 0;
-            int endT = note.getDuration();
-            // set tempo, us per tick
-            long tempo = Utils.tickToMidiTempo(note.getBPM());
-            MetaMessage mm = new MetaMessage();
-            byte[] data = MidiUtils.tempoToDataBytes(tempo);
-            mm.setMessage(81, data, 3);
-            track.add(new MidiEvent(mm, 0));
-            // start
-            ShortMessage msg = new ShortMessage();
-            msg.setMessage(NOTE_ON + channel, key, velocity);
-            track.add(new MidiEvent(msg, startT));
-            // end
-            ShortMessage msg2 = new ShortMessage();
-            msg2.setMessage(NOTE_OFF + channel, key, 0);
-            track.add(new MidiEvent(msg2, endT));
-            // output wav
-            int SR = sampleRate;
-            double duration = Utils.tickToMilliSec(endT,
-                    resolution, note.getBPM()) / 1000.0;
-            if (note.getKey() > 69) {
-                SR = 16000;
-            }
-            duration = duration + 10;
-            MidiToWavRenderer w = new MidiToWavRenderer(SR, bitDepth,
-                    channelMode);
-			/*if (note.getInstrument()==4){
-				System.out.println(note.toString() + "  channel Volume " + channelVolume);
-				util.MidiUtils.playSequence(sequencer);
-				Thread.sleep(2000);
-			}*/
-            w.createWavFile(seq, key, new File(filename), duration);
-        } catch (Exception ex) {
-            ex.printStackTrace();
-        }
-
-    }
-
-
-    // Output an array of notes to .wav file
-    private void extractAllNotes(NoteArray notes)
-            throws MidiUnavailableException, InvalidMidiDataException,
-            IOException {
-        progressWindow.display("Number of hit sounds to extract : " + notes.getSize());
-        Iterator<Note> ite = notes.iterator();
-        while (ite.hasNext()) {
-            Note n = (Note) ite.next();
-            String filename = hitsoundPath + n.getHitSound();
-            n.setVelocity(100);
-            extractNote(n, filename);
-            currentSize++;
-            progressWindow.updateProgress(currentSize);
-        }
-        if (convertOGG) {
-            Utils.convertHStoOGG(hitsoundPath);
-        }
-        progressWindow.display("Finished extracting all hit sounds");
-    }
-
-    private void loadHSConvert(String csvFile) {
-        BufferedReader br = null;
-        String line = "";
-        String cvsSplitBy = ",";
-
-        try {
-
-            br = new BufferedReader(new FileReader(csvFile));
-            while ((line = br.readLine()) != null) {
-
-                // use comma as separator
-                String[] note = line.split(cvsSplitBy);
-                hsHM.put(note[0], note[1]);
-            }
-
-        } catch (FileNotFoundException e) {
-            JOptionPane.showMessageDialog(null, convert + " is missing!\nPlease download it from my thread if you wish to use LordRaika's custom piano sounds rather than making Automap-chan create them", "File Not Found Exception", JOptionPane.ERROR_MESSAGE);
-            System.exit(-1);
-        } catch (IOException e) {
-            JOptionPane.showMessageDialog(null, "Error reading " + convert + "file", "IOException", JOptionPane.ERROR_MESSAGE);
-            System.exit(-1);
-        } catch (Exception e) {
-            JOptionPane.showMessageDialog(null, e.getMessage(), "Exception", JOptionPane.ERROR_MESSAGE);
-            System.exit(-1);
-
-        } finally {
-            if (br != null) {
-                try {
-                    br.close();
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            }
-        }
-
     }
 
     private void loadTimeline(Sequencer sequencer) throws Exception {
@@ -339,10 +194,19 @@ public class MidiToOsuConverter implements Runnable {
             }// end of track
 
         }
+
+        int firstBpm = (int) sequencer.getTempoInBPM();
         if (tempoArray.size() == 0) {
-            tempoArray.add(500000L);
-            tickTimeline.add(0l);
-            absTimeline.add(0l);
+            if (firstBpm != 0) {
+                tempoArray.add(BpmToTempoConverter.bpmToTempo(firstBpm));
+                long firstTick = TimelineHelper.getFirstTick(sequencer);
+                tickTimeline.add(firstTick);
+                absTimeline.add(Utils.tickToMilliSec(firstTick, res, 120));
+            } else {
+                tempoArray.add(500000L);
+                tickTimeline.add(0l);
+                absTimeline.add(0l);
+            }
         }
 
         //System.out.println(tempoArray);
@@ -362,7 +226,6 @@ public class MidiToOsuConverter implements Runnable {
         // List of all notes
         NoteArray totalNotes = new NoteArray();
         NoteArray BGNotes = new NoteArray();
-        bpm = (int) sequencer.getTempoInBPM();
         int trackID = 0;
         for (Track track : sequencer.getSequence().getTracks()) { // for each track
             int toBG = options[trackID];
@@ -380,21 +243,6 @@ public class MidiToOsuConverter implements Runnable {
                     if (message instanceof ShortMessage) {
                         ShortMessage sm = (ShortMessage) message;
                         bpm = Utils.getBpm(tickTimeline, tempoArray, time);
-                        int status = sm.getStatus();
-                        if (status >= 0xB0 && status <= 0xBF) {
-                            // volume change
-                            if (sm.getData1() == 7) {
-                                if (sm.getData2() == 0) {
-                                    int channel = sm.getChannel();
-                                    treatNotesOff(notes, totalNotes, BGNotes,
-                                            allTrackUniqueNotes, time, resolution, toBG, channel);
-                                } else {
-                                    channelVolume = sm.getData2();
-                                }
-                            }
-
-                        }
-
 
                         // NOTE ON
                         if (sm.getCommand() >= 0x90 && sm.getCommand() <= 0x9F) {
@@ -443,35 +291,10 @@ public class MidiToOsuConverter implements Runnable {
                                 }
                                 n.setChannel(channel);
                                 notes.add(n);
+                                totalNotes.add(n);
                                 line = line + "Note on, " + noteName + octave
                                         + " velocity: " + velocity + "\n";
-                            } else if (time > 0) {
-                                // Note Off
-
-                                treatNoteOFF(notes, totalNotes, BGNotes,
-                                        allTrackUniqueNotes, octave, noteName,
-                                        velocity, key, time, resolution, toBG, channel);
-                                line = line + "Note off, " + noteName + octave
-                                        + " velocity: " + velocity + "\n";
                             }
-                        } else if (sm.getCommand() >= 0x80
-                                && sm.getCommand() <= 0x8F && time > 0) {
-                            // Note Off
-                            int key = sm.getData1();
-                            int octave = (key / 12) - 2;
-                            int note = key % 12;
-                            String noteName = NOTE_NAMES[note];
-                            int velocity = sm.getData2();
-
-                            if (key == 58) {
-                                System.out.println("OFF at " + time);
-                            }
-
-                            treatNoteOFF(notes, totalNotes, BGNotes,
-                                    allTrackUniqueNotes, octave, noteName,
-                                    velocity, key, time, resolution, toBG, sm.getChannel());
-                            line = line + "Note off, " + noteName + octave
-                                    + " velocity: " + velocity + "\n";
                         }
                     }
 
@@ -491,14 +314,8 @@ public class MidiToOsuConverter implements Runnable {
         return output;
     }
 
-
     public void toOsuBeatmap(ArrayList<NoteArray> input) throws MidiUnavailableException, InvalidMidiDataException, IOException {
         // Create empty WAV file with same duration as song
-        String silence = outputPath + OsuBeatmap.audioName;
-        System.out.println("Song Duration in ms: " + songDurationInMS);
-        if (songDurationInMS > 0) {
-            Utils.createEmptyMp3FromWAV(silence);
-        }
         currentSize++;
         NoteArray totalNotes = input.get(0);
         if (totalNotes.getSize() == 0) {
@@ -536,12 +353,8 @@ public class MidiToOsuConverter implements Runnable {
         progressWindow.display("total number of notes = " + totalNotes.getSize());
         ArrayList<NoteArray> list = totalNotes.sortNotesByTime();
         System.out.println("Sorted notes into chords...");
-        ChartingAlgorithm ChartConv = new ChartingAlgorithm();
-        ChartConv.setColumns(list, keyCount, MAX_CHORD, DifficultyOfDensity);
-        if (BGNotes.getBGSize() > 0 && totalNotes.getSize() > 0) {
-            ArrayList<NoteArray> bgList = BGNotes.sortBGNotesByTime();
-            list = addBGNotes(list, bgList);
-        }
+        DrumNoteProcessor ChartConv = new DrumNoteProcessor();
+        ChartConv.process(list);
         System.out.println("Sent some set notes into SB...");
         String osuOutput = "";
         String sampleOutput = "//Storyboard Sound Samples\n"; // all the bg
@@ -551,7 +364,6 @@ public class MidiToOsuConverter implements Runnable {
         while (ite.hasNext()) {
             //System.out.println("Treating chord "+loop+ "  ...");
             NoteArray chord = ite.next();
-            chord.sortByPitch();
             sampleOutput += chord.toBackgroundSample(volume);
             osuOutput += chord.toHitObjects(keyCount,
                     sequencer.getSequence().getResolution(), LN_Cutoff, volume);
@@ -572,207 +384,24 @@ public class MidiToOsuConverter implements Runnable {
         progressWindow.display("finished outputing osu hit objects!");
         currentSize++;
         progressWindow.updateProgress(currentSize);
-
-
-        if (extractNotes && customHS == false) {
-            extractAllNotes(allTrackUniqueNotes);
-        } else if (extractNotes && customHS) {
-            copyCustomHS(allTrackUniqueNotes);
-        }
-
     }
 
-
-    private void copyCustomHS(NoteArray notes) {
-        File pianoFolder = new File(PropertyAdapter.PATH + "\\Grand Piano\\");
-        if (pianoFolder.exists() && pianoFolder.isDirectory()) {
-            progressWindow.display("Number of hit sounds to extract : " + notes.getSize());
-            Iterator<Note> ite = notes.iterator();
-            while (ite.hasNext()) {
-                Note n = (Note) ite.next();
-                String folder = pianoFolder.getAbsolutePath() + "\\";
-                if (n.getName().contains("_s")) {
-                    folder = folder + "Short\\";
-                }
-                n.setVelocity(100);
-                //copy to target folder
-                File source = new File(folder + n.getHitSound());
-                File target = new File(hitsoundPath + n.getHitSound());
-                try {
-                    FileUtils.copyFile(source, target);
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-                currentSize++;
-                progressWindow.updateProgress(currentSize);
-            }
-            if (convertOGG) {
-                Utils.convertHStoOGG(hitsoundPath);
-            }
-            progressWindow.display("Finished extracting all hit sounds");
-        } else {
-            JOptionPane.showMessageDialog(null, pianoFolder.toPath() + " folder is missing!\nPlease download it from my thread if you wish to use LordRaika's custom piano sounds rather than making Automap-chan create them",
-                    "File Not Found Exception", JOptionPane.ERROR_MESSAGE);
-            System.exit(-1);
-        }
-
+    private void copyDrumSamples() {
+        Arrays.stream(DrumSample.values()).forEach(this::copyDrumSample);
+        progressWindow.display("Finished extracting all hit sounds");
     }
 
-    @SuppressWarnings("unchecked")
-    private ArrayList<NoteArray> addBGNotes(ArrayList<NoteArray> listOfChords, ArrayList<NoteArray> BGNotes) {
-        ArrayList<NoteArray> temp = (ArrayList<NoteArray>) BGNotes.clone();
-        ArrayList<NoteArray> output = (ArrayList<NoteArray>) listOfChords.clone();
-        while (temp.size() != 0) {
-            NoteArray aBGChord = temp.get(0);
-            long bgTime = aBGChord.getBGNoteFromIndex(0).getAbs();
-            for (int i = 0; i < listOfChords.size(); i++) {
-                NoteArray aChord = listOfChords.get(i);
-                long time = aChord.getNoteFromIndex(0).getAbs();
-                if (bgTime == time) {
-                    int index = output.indexOf(aChord);
-                    aChord.addAllBGNotes(aBGChord);
-                    output.set(index, aChord);
-                    aBGChord = null;
-                    break;
-                } else if (bgTime < time) {
-                    int index = output.indexOf(aChord);
-                    output.add(index, aBGChord);
-                    aBGChord = null;
-                    break;
-                }
-            }
-            if (aBGChord != null && aBGChord.getBGSize() != 0) {
-                output.add(aBGChord);
-            }
-            temp.remove(0);
+    private void copyDrumSample(DrumSample drumSample) {
+        String fileName = drumSample.getFilename();
+        String sourcePath = DrumSample.getFolderName() + fileName;
+        String targetPathString = outputPath + drumSample.getFilename();
+        Path targetPath = Paths.get(targetPathString);
+
+        try (InputStream inputStream = MidiToOsuConverter.class.getClassLoader().getResourceAsStream(sourcePath)) {
+            Files.copy(inputStream, targetPath, StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
         }
-        return output;
     }
-
-    private void treatNotesOff(NoteArray notes, NoteArray totalNotes,
-                               NoteArray BGNotes, NoteArray allTrackUniqueNotes,
-                               long time, int resolution, int toBG, int channel) {
-
-        System.out.println("Channel " + channel + " volume is 0 at time " + time);
-
-        NoteArray tempNotes = notes.clone();
-        Iterator<Note> ite = tempNotes.iterator();
-        while (ite.hasNext()) {
-            // turn off each note that is ON currently, that is in the channel where
-            Note oldNote = ite.next();
-            if (oldNote.getChannel() == channel) {
-                Note newNote = oldNote.clone();
-                System.out.println("Removed note " + newNote.toString());
-                notes.remove(oldNote);
-                int duration = (int) (time - oldNote.getTime());
-                if (duration == 0) {
-                    System.out.println("duration is 0 at time " + time);
-                    throw new IllegalArgumentException(newNote.toString());
-                } else if (duration < resolution && mergeHS && customHS == false) {
-                    duration = resolution;
-                } else if (duration % resolution != 0 && mergeHS && customHS == false) {
-                    int beat = duration / resolution;
-                    duration = beat * resolution;
-                }
-                newNote.setDuration(duration);
-
-                if (customHS) {
-                    if (newNote.getDuration() < resolution) {
-                        //System.out.println("short note" + n.getName());
-                        newNote.setName(hsHM.get(newNote.getName()) + "_s");
-                        //System.out.println(n.getName());
-                    } else {
-                        newNote.setName(hsHM.get(newNote.getName()));
-                    }
-
-                }
-                if (toBG == 1) {
-                    BGNotes.addBGNote(newNote);
-                } else if (toBG == 0) {
-                    totalNotes.add(newNote);
-                }
-                if (customHS) {
-                    if (!allTrackUniqueNotes.contains(newNote, newNote.getBPM())) {
-                        allTrackUniqueNotes.add(newNote);
-                    }
-                } else {
-                    if (!allTrackUniqueNotes.contains(newNote, newNote.getDuration(), newNote.getBPM())) {
-                        allTrackUniqueNotes.add(newNote);
-                    }
-                }
-            }
-
-        }
-
-
-    }
-
-    private void treatNoteOFF(NoteArray notes, NoteArray totalNotes,
-                              NoteArray BGNotes, NoteArray allTrackUniqueNotes, int octave,
-                              String noteName, int velocity, int key, long time, int resolution, int toBG, int channel) {
-        Note n = null;
-        if (octave < 0) {
-            octave = Math.abs(octave);
-            n = new Note(noteName + "_" + octave, velocity, time, key, bpm);
-        } else {
-            n = new Note(noteName + octave, velocity, time, key, bpm);
-        }
-        n.setChannel(channel);
-        if (notes.contains(n)) {
-            Note previousNote = notes.getNote(n);
-            n.setBPM(previousNote.getBPM());
-            n.setChannel(previousNote.getChannel());
-            n.setInstrument(previousNote.getInstrument());
-            n.setChannelVolume(previousNote.getChannelVolume());
-            long startTime = previousNote.getTime();
-            long endTime = n.getTime();
-            int duration = (int) (endTime - startTime);
-            n.setLNduration(duration);
-            if (duration == 0) {
-                System.out.println("duration is 0 at time " + time);
-                //throw new IllegalArgumentException(n.toString());
-                return;
-            } else if (duration < resolution && mergeHS && customHS == false) {
-                duration = resolution;
-            } else if (duration % resolution != 0 && mergeHS && customHS == false) {
-                int beat = duration / resolution;
-                duration = beat * resolution;
-            }
-            n.setDuration(duration);
-            n.setAbs(previousNote.getAbs());
-            n.setVelocity(previousNote);
-            n.setTime(previousNote.getTime());
-            notes.remove(n);
-            n.setCustomHS(customHS);
-            if (customHS) {
-                if (n.getDuration() < resolution) {
-                    //System.out.println("short note" + n.getName());
-                    n.setName(hsHM.get(n.getName()) + "_s");
-                    //System.out.println(n.getName());
-                } else {
-                    n.setName(hsHM.get(n.getName()));
-                }
-
-            }
-            if (toBG == 1) {
-                BGNotes.addBGNote(n);
-            } else if (toBG == 0) {
-                totalNotes.add(n);
-            }
-            if (customHS) {
-                if (!allTrackUniqueNotes.contains(n, n.getBPM())) {
-                    allTrackUniqueNotes.add(n);
-                }
-            } else {
-                if (!allTrackUniqueNotes.contains(n, n.getDuration(), n.getBPM())) {
-                    allTrackUniqueNotes.add(n);
-                }
-            }
-
-
-        }
-
-    }
-
 
 }

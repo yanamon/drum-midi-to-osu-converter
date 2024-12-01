@@ -24,9 +24,6 @@ import javax.sound.sampled.AudioFormat;
 import javax.sound.sampled.AudioInputStream;
 import javax.sound.sampled.AudioSystem;
 
-import be.hogent.tarsos.midi.MidiCommon;
-import be.hogent.tarsos.midi.MidiUtils;
-
 import com.sun.media.sound.AudioSynthesizer;
 
 /**
@@ -94,7 +91,6 @@ public final class MidiToWavRenderer {
 	 */
 	public void setTuning(final double[] tuning) throws IOException,
 			InvalidMidiDataException, MidiUnavailableException {
-		rebasedTuning = MidiCommon.tuningFromPeaks(tuning);
 	}
 
 	public void saveSongWAV(final Sequence sequence, final String outputFile,double duration) throws MidiUnavailableException, IOException{
@@ -220,17 +216,5 @@ public final class MidiToWavRenderer {
 	}
 
 	private void tune(final Receiver recv) {
-		try {
-			if (rebasedTuning != null) {
-				for (int i = 0; i < 16; i++) {
-					MidiUtils.sendTunings(recv, i, 0, "african", rebasedTuning);
-					MidiUtils.sendTuningChange(recv, i, 0);
-				}
-			}
-		} catch (final IOException e) {
-			LOG.log(Level.SEVERE, e.getMessage(), e);
-		} catch (final InvalidMidiDataException e) {
-			LOG.log(Level.SEVERE, e.getMessage(), e);
-		}
 	}
 }

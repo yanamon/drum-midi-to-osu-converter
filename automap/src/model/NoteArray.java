@@ -3,6 +3,7 @@ package model;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
+import java.util.List;
 
 public class NoteArray {
 	// Instance variables
@@ -14,6 +15,10 @@ public class NoteArray {
 	public NoteArray() {
 		notes = new ArrayList<Note>();
 		BGnotes = new ArrayList<Note>();
+	}
+
+	public List<Note> getNotes() {
+		return this.notes;
 	}
 
 	public void add(Note n) {
@@ -304,16 +309,11 @@ public class NoteArray {
 			keyCount = keyCount + 1;
 		}
 
-		ArrayList<Integer> columns = new ArrayList<>();
-		for (int i = 0; i < notes.size(); i++){
-			columns.add(notes.get(i).getColumn());
-		}
-		Collections.sort(columns);
 		for (int i = 0; i < notes.size(); i++) { // we work under the assumption
 													// that notes.size() is
 													// smaller than keyCount
 			Note n = notes.get(i);
-			output += n.toHitObject(columns.get(i), resolution, iniKeyCount,
+			output += n.toHitObject(n.getColumn(), resolution, iniKeyCount,
 					LN_Cutoff, volume);
 		}
 

@@ -51,41 +51,33 @@ public class Utils {
 	}
 	
 	public static void convertHStoOGG(String path){
-		File folder = new File(path);
-		if (folder.isDirectory() && folder.listFiles().length != 0){
-			File[] files = folder.listFiles();
-			for (int i = 0; i<files.length;i++){
-				File source = files[i];
-				File target = new File(getFilenameWithoutExtensionFromPath(source.getAbsolutePath())+".ogg");
-				AudioAttributes audio = new AudioAttributes();
-				audio.setCodec("libvorbis");
-				audio.setBitRate(new Integer(256000));
-				audio.setChannels(channels);
-				audio.setSamplingRate(new Integer(44100));
-				EncodingAttributes attrs = new EncodingAttributes();
-				attrs.setFormat("ogg");
-				attrs.setAudioAttributes(audio);
+		File source = new File(path);
+		File target = new File(getFilenameWithoutExtensionFromPath(source.getAbsolutePath())+".ogg");
+		AudioAttributes audio = new AudioAttributes();
+		audio.setCodec("libvorbis");
+		audio.setBitRate(new Integer(256000));
+		audio.setChannels(channels);
+		audio.setSamplingRate(new Integer(44100));
+		EncodingAttributes attrs = new EncodingAttributes();
+		attrs.setFormat("ogg");
+		attrs.setAudioAttributes(audio);
 
-				Encoder encoder = new Encoder();
+		Encoder encoder = new Encoder();
 
-				try {
-					encoder.encode(source, target, attrs);
-				} catch (IllegalArgumentException e) {
-					e.printStackTrace();
-				} catch (InputFormatException e) {
-					System.out.println(i);
-					System.out.println(source + "\n" + target + "\n" + attrs);
-					
-					e.printStackTrace();
-				} catch (EncoderException e) {
-					
-					e.printStackTrace();
-				}
-				// Delete wav
-				source.delete();
-				target.renameTo(source);
-			}
+		try {
+			encoder.encode(source, target, attrs);
+		} catch (IllegalArgumentException e) {
+			e.printStackTrace();
+		} catch (InputFormatException e) {
+			System.out.println(source + "\n" + target + "\n" + attrs);
+
+			e.printStackTrace();
+		} catch (EncoderException e) {
+
+			e.printStackTrace();
 		}
+		// Delete wav
+		source.delete();
 	}
 	
 	public static void createEmptyMp3FromWAV(String fileName){

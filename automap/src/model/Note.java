@@ -1,5 +1,8 @@
 package model;
 
+import model.midi.percussion.Percussion;
+import util.midi.percussion.PercussionHelper;
+
 import java.text.DecimalFormat;
 import java.util.Comparator;
 
@@ -18,7 +21,10 @@ public class Note {
 	private int channel = 0;
 	private int bpm;
 	private long abstime;				
-	private boolean customHS = false;
+	private boolean customHS = true;
+	private String hitSound;
+
+	private Percussion percussion;
 
 	// Constructor
 	public Note(String n, int v, long t, int k, int BPM, long abs,
@@ -36,6 +42,7 @@ public class Note {
 		velocity = v;
 		time = t;
 		key = k;
+		percussion = PercussionHelper.getPercussionByMidiKey(k);
 		bpm = BPM;
 		abstime = abs;
 		column = -2;
@@ -51,6 +58,7 @@ public class Note {
 		velocity = v;
 		time = t;
 		key = k;
+		percussion = PercussionHelper.getPercussionByMidiKey(k);
 		bpm = BPM;
 	}
 	
@@ -252,10 +260,10 @@ public class Note {
 					getHitSound());
 		}
 		*/
-		// Warning
-		ho = new HitObject(column, abstime, volume, getHitSound());
-		// Above needs to be changed when implementing LN
-		
+
+		long endLn = LNduration == 0 ? 0 : abstime+LNduration;
+		ho = new HitObject(column, abstime, volume, endLn, hitSound);
+
 		s = ho.toString();
 		return s;
 	}
@@ -306,6 +314,14 @@ public class Note {
 
 	public void setLNduration(int lNduration) {
 		LNduration = lNduration;
+	}
+
+	public Percussion getPercussion() {
+		return this.percussion;
+	}
+
+	public void setHitSound(String hitSound) {
+		this.hitSound = hitSound;
 	}
 
 }

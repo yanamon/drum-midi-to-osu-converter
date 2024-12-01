@@ -63,11 +63,11 @@ public class HitObject {
 		if (endLN == 0) {
 			// for a single note
 			return "" + xposition + "," + ypos + "," + startTime + "," + 1
-					+ "," + 0 + "," + "0:0:0:" + volume + ":" + hitSound + "\n";
+			+ "," + 0 + "," + "0:0:0:" + volume + ":" + hitSound + "\n";
 		}
 		// for a LN
-		return "" + xposition + "," + ypos + "," + startTime + "," + 128 + ","
-				+ 0 + "," + endLN + ":0:0:0:" + volume + ":" + hitSound + "\n";
+		return "" + xposition + "," + ypos + "," + startTime + "," + 128
+			+ "," + 0 + "," + endLN + ":0:0:0:" + volume + ":" + hitSound + "\n";
 	}
 
 }

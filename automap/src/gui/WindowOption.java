@@ -3,10 +3,9 @@ package gui;
 import main.MidiToOsuConverter;
 import util.MidiUtils;
 import util.PropertyAdapter;
+import util.midi.sequence.ChannelGetter;
 
-import javax.sound.midi.InvalidMidiDataException;
-import javax.sound.midi.MidiUnavailableException;
-import javax.sound.midi.Sequencer;
+import javax.sound.midi.*;
 import javax.swing.*;
 import javax.swing.GroupLayout.Alignment;
 import javax.swing.LayoutStyle.ComponentPlacement;
@@ -16,10 +15,8 @@ import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.io.*;
-import java.util.ArrayList;
-import java.util.Collections;
+import java.util.*;
 import java.util.List;
-import java.util.Properties;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -104,6 +101,7 @@ public class WindowOption extends javax.swing.JFrame {
         } else {
             this.sequencer = sequencer;
         }
+        deleteNonDrumTracks(this.sequencer);
         MidiUtils.fixChannels(sequencer);
         SwingUtilities.invokeLater(new Runnable() {
             public void run() {
@@ -112,6 +110,15 @@ public class WindowOption extends javax.swing.JFrame {
             }
         });
 
+    }
+
+    private void deleteNonDrumTracks(Sequencer sequencer) {
+        final int DRUM_CHANNEL = 9;
+        Sequence sequence = sequencer.getSequence();
+
+        Arrays.stream(sequence.getTracks())
+            .filter(track -> ChannelGetter.getChannel(track) != DRUM_CHANNEL)
+            .forEach(sequence::deleteTrack);
     }
 
     private void initComponents2() {
