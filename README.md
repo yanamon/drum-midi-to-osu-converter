@@ -1,3 +1,8 @@
+## How to run
+When importing this project to Eclipse, please add the following as external libraies:
+jave-1.0.2.jar
+then run the main class
+
 ## Description
 Convert drum midi to osu mania beatmap.
 Notes placement are following real drum pattern.
